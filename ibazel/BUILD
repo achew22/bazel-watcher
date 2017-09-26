@@ -24,6 +24,8 @@ go_binary(
 go_library(
     name = "go_default_library",
     srcs = [
+        "command.go",
+        "default_command.go",
         "ibazel.go",
         "main.go",
         "source_event_handler.go",
@@ -39,6 +41,7 @@ go_library(
 go_test(
     name = "go_default_test",
     srcs = [
+        "command_test.go",
         "ibazel_test.go",
         "main_test.go",
     ],

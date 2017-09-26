@@ -20,7 +20,6 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/debug"
-	"syscall"
 	"testing"
 
 	"github.com/bazelbuild/bazel-watcher/bazel"
@@ -43,6 +42,15 @@ func assertKilled(t *testing.T, cmd *exec.Cmd) {
 		if cmd.ProcessState == nil {
 			t.Errorf("Killable subprocess was never started. State: %v, Err: %v", cmd.ProcessState, err)
 		}
+	}
+}
+
+func TestDefaultCommand(bazel bazel.Bazel, target string, args []string, cmd *exec.Cmd) Command {
+	return &defaultCommand{
+		target: target,
+		b:      bazel,
+		args:   args,
+		cmd:    cmd,
 	}
 }
 
@@ -219,196 +227,4 @@ func TestIBazelRun_firstPass(t *testing.T) {
 	if err := cmd.Wait(); err != nil {
 		t.Errorf("Subprocess was never started. State: %v, Err: %v", cmd.ProcessState, err)
 	}
-}
-
-func TestIBazelRun_killPrexistiingJobWhenStarting(t *testing.T) {
-	i, err := New()
-	if err != nil {
-		t.Errorf("Error creating IBazel: %s", err)
-	}
-
-	defer i.Cleanup()
-
-	// Create a process that has been started and can be killed
-	toKill := exec.Command("sleep", "5s")
-	toKill.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	i.cmd = toKill
-	toKill.Start()
-
-	cmd := exec.Command("ls")
-	execCommand = func(name string, arg ...string) *exec.Cmd {
-		return cmd
-	}
-
-	i.run("//path/to:target")
-
-	expected := [][]string{
-		[]string{"Cancel"},
-		[]string{"WriteToStderr"},
-		[]string{"WriteToStdout"},
-		[]string{"Run", "--script_path=.*", "//path/to:target"},
-	}
-
-	mockBazel.AssertActions(t, expected)
-
-	if cmd.Stdout != os.Stdout {
-		t.Errorf("Didn't set Stdout correctly")
-	}
-	if cmd.Stderr != os.Stderr {
-		t.Errorf("Didn't set Stderr correctly")
-	}
-	if cmd.SysProcAttr.Setpgid != true {
-		t.Errorf("Never set PGID (will prevent killing process trees -- see notes in ibazel.go")
-	}
-
-	if err := cmd.Wait(); err != nil {
-		t.Errorf("New subprocess was never started. State: %v, Err: %v", cmd.ProcessState, err)
-	}
-
-	assertKilled(t, toKill)
-}
-
-func TestSubprocessRunning(t *testing.T) {
-	i, err := New()
-	if err != nil {
-		t.Errorf("Error creating IBazel: %s", err)
-	}
-	defer i.Cleanup()
-
-	i.cmd = exec.Command("sleep", "200ms")
-	i.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	assertEqual(t, i.subprocessRunning(), false, "")
-	i.cmd.Start()
-	assertEqual(t, i.subprocessRunning(), true, "")
-	i.cmd.Wait()
-	assertEqual(t, i.subprocessRunning(), false, "")
-
-	i.cmd = exec.Command("sleep", "1s")
-	i.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	assertEqual(t, i.subprocessRunning(), false, "")
-	i.cmd.Start()
-	assertEqual(t, i.subprocessRunning(), true, "")
-	// Save a reference to the cmd since kill wipes it
-	cmd := i.cmd
-	i.kill()
-	assertEqual(t, i.subprocessRunning(), false, "")
-	assertKilled(t, cmd)
-}
-
-func TestKill(t *testing.T) {
-	i, err := New()
-	if err != nil {
-		t.Errorf("Error creating IBazel: %s", err)
-	}
-	defer i.Cleanup()
-
-	i.cmd = exec.Command("sleep", "5s")
-	i.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	i.cmd.Start()
-	cmd := i.cmd
-	i.kill()
-	assertKilled(t, cmd)
-}
-
-func TestHandleSignals_SIGINTWithoutRunningCommand(t *testing.T) {
-	i := &IBazel{}
-	err := i.setup()
-	if err != nil {
-		t.Errorf("Error creating IBazel: %s", err)
-	}
-	i.sigs = make(chan os.Signal, 1)
-	defer i.Cleanup()
-
-	// But we want to simulate the subprocess not dieing
-	attemptedExit := 0
-	osExit = func(i int) {
-		attemptedExit = i
-	}
-	assertEqual(t, i.subprocessRunning(), false, "There shouldn't be a subprocess running")
-
-	// SIGINT without a running command should attempt to exit
-	i.sigs <- syscall.SIGINT
-	i.handleSignals()
-
-	// Goroutine tests are kind of racey
-	assertEqual(t, attemptedExit, 3, "Should have exited ibazel")
-}
-
-func TestHandleSignals_SIGINT(t *testing.T) {
-	i := &IBazel{}
-	err := i.setup()
-	if err != nil {
-		t.Errorf("Error creating IBazel: %s", err)
-	}
-	i.sigs = make(chan os.Signal, 1)
-	defer i.Cleanup()
-
-	// But we want to simulate the subprocess not dieing
-	attemptedExit := 0
-	osExit = func(i int) {
-		attemptedExit = i
-	}
-
-	// Attempt to kill a task 2 times (but secretly resurrect the job from the
-	// dead to test the job not responding)
-	for j := 0; j < 2; j++ {
-		// Start a task running for 5 seconds
-		i.cmd = exec.Command("sleep", "5s")
-		i.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		i.cmd.Start()
-
-		// This should kill the subprocess and simulate hitting ctrl-c
-		// First save the cmd so we can make assertions on it. It will be removed
-		// by the SIGINT
-		cmd := i.cmd
-		i.sigs <- syscall.SIGINT
-		i.handleSignals()
-		assertKilled(t, cmd)
-		assertEqual(t, attemptedExit, 0, "It shouldn't have os.Exit'd")
-	}
-
-	i.cmd = exec.Command("sleep", "5s")
-	i.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	i.cmd.Start()
-	// First save the cmd so we can make assertions on it. It will be removed
-	// by the SIGINT
-	cmd := i.cmd
-
-	// This should kill the job and go over the interrupt limit where exiting happens
-	i.sigs <- syscall.SIGINT
-	i.handleSignals()
-	assertKilled(t, cmd)
-
-	assertEqual(t, attemptedExit, 3, "Should have exited ibazel")
-}
-
-func TestHandleSignals_SIGKILL(t *testing.T) {
-	i := &IBazel{}
-	err := i.setup()
-	if err != nil {
-		t.Errorf("Error creating IBazel: %s", err)
-	}
-	i.sigs = make(chan os.Signal, 1)
-	defer i.Cleanup()
-
-	// Now test sending SIGKILL
-	attemptedExit := false
-	osExit = func(i int) {
-		attemptedExit = true
-	}
-	attemptedExit = false
-
-	i.cmd = exec.Command("sleep", "1s")
-	i.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	i.cmd.Start()
-	// First save the cmd so we can make assertions on it. It will be removed
-	// by the SIGINT
-	cmd := i.cmd
-	_ = cmd
-
-	i.sigs <- syscall.SIGKILL
-	i.handleSignals()
-	assertKilled(t, cmd)
-
-	assertEqual(t, attemptedExit, true, "Should have exited ibazel")
 }

@@ -16,9 +16,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -30,7 +28,6 @@ import (
 
 var osExit = os.Exit
 var bazelNew = bazel.New
-var execCommand = exec.Command
 
 type State string
 
@@ -50,7 +47,7 @@ const buildQuery = "buildfiles(deps(set(%s)))"
 type IBazel struct {
 	b *bazel.Bazel
 
-	cmd       *exec.Cmd
+	cmd       Command
 	args      []string
 	bazelArgs []string
 
@@ -87,29 +84,26 @@ func New() (*IBazel, error) {
 func (i *IBazel) handleSignals() {
 	// Got an OS signal (SIGINT, SIGKILL).
 	sig := <-i.sigs
-	fmt.Printf("XXXXX: GOT A SIGNAL: %s\n", sig)
 
 	switch sig {
 	case syscall.SIGINT:
-		if i.subprocessRunning() {
-			fmt.Printf("XXXXX: PROCESS IS RUNNING %s\n", sig)
+		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
 			fmt.Printf("\nSubprocess killed from getting SIGINT\n")
-			i.kill()
+			i.cmd.Terminate()
 		} else {
-			fmt.Printf("XXXXX: PROCESS IS NOT RUNNING %s\n", sig)
 			osExit(3)
 		}
 		break
 	case syscall.SIGKILL:
-		if i.subprocessRunning() {
+		if i.cmd != nil && i.cmd.IsSubprocessRunning() {
 			fmt.Printf("\nSubprocess killed from getting SIGKILL\n")
-			i.kill()
+			i.cmd.Terminate()
 		}
 		osExit(3)
 		return
 		break
 	default:
-		fmt.Printf("Got a signal that wasn't handled. Please file a bug against bazel-watceer that describes how you did this. This is a big problem.\n")
+		fmt.Printf("Got a signal that wasn't handled. Please file a bug against bazel-watcher that describes how you did this. This is a big problem.\n")
 	}
 
 	i.interruptCount += 1
@@ -246,39 +240,10 @@ func (i *IBazel) test(targets ...string) {
 	}
 }
 
-func (i *IBazel) subprocessRunning() bool {
-	if i.cmd == nil {
-		return false
-	}
-	if i.cmd.Process == nil {
-		return false
-	}
-	if i.cmd.ProcessState != nil {
-		if i.cmd.ProcessState.Exited() {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (i *IBazel) kill() {
-	if !i.subprocessRunning() {
-		return
-	}
-
-	// Kill it with fire by sending SIGKILL to the process PID which should
-	// propagate down to any subprocesses in the PGID (Process Group ID). To
-	// send to the PGID, send the signal to the negative of the process PID.
-	// Normally I would do this by calling i.cmd.Process.Signal, but that
-	// only goes to the PID not the PGID.
-	syscall.Kill(-i.cmd.Process.Pid, syscall.SIGKILL)
-	i.cmd.Wait()
-	i.cmd = nil
-}
-
 func (i *IBazel) run(targets ...string) {
-	i.kill()
+	if i.cmd != nil {
+		i.cmd.NotifyOfChanges()
+	}
 
 	b := i.newBazel()
 
@@ -286,34 +251,8 @@ func (i *IBazel) run(targets ...string) {
 	b.WriteToStderr(true)
 	b.WriteToStdout(true)
 
-	tmpfile, err := ioutil.TempFile("", "bazel_script_path")
-	if err != nil {
-		fmt.Print(err)
-	}
-	// Close the file so bazel can write over it
-	if err := tmpfile.Close(); err != nil {
-		fmt.Print(err)
-	}
-
-	// Start by building the binary
-	b.Run(append([]string{"--script_path=" + tmpfile.Name()}, targets...)...)
-
-	targetPath := tmpfile.Name()
-
-	// Now that we have built the target, construct a executable form of it for
-	// execution in a go routine.
-	i.cmd = execCommand(targetPath, i.args...)
-	i.cmd.Stdout = os.Stdout
-	i.cmd.Stderr = os.Stderr
-
-	// Set a process group id (PGID) on the subprocess. This is
-	i.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-
-	// Start run in a goroutine so that it doesn't block watching for files that
-	// have changed.
-	if err := i.cmd.Start(); err != nil {
-		fmt.Printf("Error starting process: %v\n", err)
-	}
+	i.cmd = DefaultCommand(b, targets[0], i.args)
+	i.cmd.Start()
 }
 
 func (i *IBazel) queryForSourceFiles(query string) []string {
