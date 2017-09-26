@@ -12,20 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
-
-go_binary(
-    name = "ibazel",
-    importpath = "github.com/bazelbuild/bazel-watcher/ibazel",
-    library = ":go_default_library",
-    visibility = ["//visibility:public"],
-)
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "go_default_library",
     srcs = [
-        "command.go",
-        "default_command.go",
         "ibazel.go",
         "main.go",
         "source_event_handler.go",
@@ -34,6 +25,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//bazel:go_default_library",
+        "//ibazel/command:go_default_library",
         "@com_github_fsnotify_fsnotify//:go_default_library",
     ],
 )
@@ -41,7 +33,6 @@ go_library(
 go_test(
     name = "go_default_test",
     srcs = [
-        "command_test.go",
         "ibazel_test.go",
         "main_test.go",
     ],

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package command
 
 import (
 	"fmt"
@@ -23,11 +23,13 @@ import (
 	"time"
 
 	"github.com/bazelbuild/bazel-watcher/bazel"
+	"github.com/bazelbuild/bazel-watcher/ibazel/command"
 	"github.com/fsnotify/fsnotify"
 )
 
 var osExit = os.Exit
 var bazelNew = bazel.New
+var commandDefaultCommand = command.DefaultCommand
 
 type State string
 
@@ -47,7 +49,7 @@ const buildQuery = "buildfiles(deps(set(%s)))"
 type IBazel struct {
 	b *bazel.Bazel
 
-	cmd       Command
+	cmd       command.Command
 	args      []string
 	bazelArgs []string
 
@@ -251,7 +253,7 @@ func (i *IBazel) run(targets ...string) {
 	b.WriteToStderr(true)
 	b.WriteToStdout(true)
 
-	i.cmd = DefaultCommand(b, targets[0], i.args)
+	i.cmd = commandDefaultCommand(b, targets[0], i.args)
 	i.cmd.Start()
 }
 
