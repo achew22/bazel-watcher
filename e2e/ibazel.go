@@ -39,7 +39,7 @@ func (i *iBazelTester) Run() {
 	// Try to delete the file. Sometimes the file won't be overwritten properly
 	// but if it is deleted there is no risk for that problem. Investigate that.
 	os.Remove(launcherPath)
-	launcher := fmt.Sprintf("#! /usr/bin/env bash\nexec %s", i.binPath)
+	launcher := fmt.Sprintf("#! /usr/bin/env bash\nset -e\nexec %s", i.binPath)
 	err := ioutil.WriteFile(launcherPath, []byte(launcher), 0755)
 	if err != nil {
 		panic(err)

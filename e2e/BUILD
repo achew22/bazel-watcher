@@ -2,9 +2,13 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_test(
     name = "go_default_test",
-    srcs = ["simple_test.go"],
+    srcs = [
+        "notification_test.go",
+        "simple_test.go",
+    ],
     data = [
         "//e2e/bazel",
+        "//e2e/notification",
         "//e2e/simple",
         "//ibazel",
     ],

@@ -6,11 +6,10 @@ import (
 )
 
 func TestSimpleRun(t *testing.T) {
-	t.Skip()
 	ibazel := IBazelTester("//e2e/simple", "e2e/simple/simple")
 	ibazel.Run()
 	defer ibazel.Kill()
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	res := ibazel.GetOutput()
 
 	assertEqual(t, "Started!", res, "Ouput was inequal")

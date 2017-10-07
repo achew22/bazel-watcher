@@ -38,85 +38,101 @@ func fuzzyEqual(pattern []interface{}, compare []string) bool {
 	return true
 }
 
-func runWithScript(args []string) {
-	// Since all ru ncommands start with "run" as arg0 and it breaks flag
-	// parsing, strip args[1]. If you need it, imagine there is a "run" at the
-	// beginning.
-	args = args[1:]
+func runWithScript(name string) func([]string) {
+	return func(args []string) {
+		// Since all ru ncommands start with "run" as arg0 and it breaks flag
+		// parsing, strip args[1]. If you need it, imagine there is a "run" at the
+		// beginning.
+		args = args[1:]
 
-	fs := flag.NewFlagSet("bazel_run_flags", flag.ExitOnError)
-	scriptPath := fs.String("script_path", "default", "")
-	err := fs.Parse(args)
-	if err != nil {
-		panic(err)
-	}
+		fs := flag.NewFlagSet("bazel_run_flags", flag.ExitOnError)
+		scriptPath := fs.String("script_path", "default", "")
+		err := fs.Parse(args)
+		if err != nil {
+			panic(err)
+		}
 
-	sp, err := os.OpenFile(*scriptPath, os.O_CREATE|os.O_WRONLY, 0755)
-	if err != nil {
-		panic(err)
-	}
+		sp, err := os.OpenFile(*scriptPath, os.O_CREATE|os.O_WRONLY, 0755)
+		if err != nil {
+			panic(err)
+		}
 
-	err = sp.Chmod(0755)
-	if err != nil {
-		panic(err)
-	}
+		err = sp.Chmod(0755)
+		if err != nil {
+			panic(err)
+		}
 
-	fmt.Fprintf(sp, `#! /usr/bin/env bash
+		fmt.Fprintf(sp, `#! /usr/bin/env bash
 set -e
 %s &
 PID="$!"
 echo -n $PID > %s
 wait`, filepath.Join(os.TempDir(), "ibazel_e2e_subprocess_launcher"),
-		filepath.Join(os.TempDir(), "ibazel_e2e_subprocess_launcher.pid"))
-	err = sp.Close()
-	if err != nil {
-		panic(err)
+			filepath.Join(os.TempDir(), "ibazel_e2e_subprocess_launcher.pid"))
+		err = sp.Close()
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
-var sourceFiles = &blaze_query.QueryResult{
-	Target: []*blaze_query.Target{
-		&blaze_query.Target{
-			Type: blaze_query.Target_SOURCE_FILE.Enum(),
-			SourceFile: &blaze_query.SourceFile{
-				Name:            proto.String("//e2e/simple:main.go"),
-				Location:        proto.String("/home/user/go/src/github.com/bazelbuild/bazel-watcher/e2e/simple/BUILD.bazel:3:1"),
-				VisibilityLabel: []string{"//visibility:private"},
+func sourceFiles(name string) *blaze_query.QueryResult {
+	return &blaze_query.QueryResult{
+		Target: []*blaze_query.Target{
+			&blaze_query.Target{
+				Type: blaze_query.Target_SOURCE_FILE.Enum(),
+				SourceFile: &blaze_query.SourceFile{
+					Name:            proto.String("//e2e/simple:main.go"),
+					Location:        proto.String("/home/user/go/src/github.com/bazelbuild/bazel-watcher/e2e/simple/BUILD.bazel:3:1"),
+					VisibilityLabel: []string{"//visibility:private"},
+				},
 			},
 		},
-	},
-}
-var buildFiles = &blaze_query.QueryResult{
-	Target: []*blaze_query.Target{
-		&blaze_query.Target{
-			Type: blaze_query.Target_SOURCE_FILE.Enum(),
-			SourceFile: &blaze_query.SourceFile{
-				Name:            proto.String("//e2e/simple:BUILD.bazel"),
-				Location:        proto.String("/home/user/go/src/github.com/bazelbuild/bazel-watcher/e2e/simple/BUILD.bazel:1"),
-				VisibilityLabel: []string{"//visibility:private"},
-			},
-		},
-	},
+	}
 }
 
-var target = &blaze_query.QueryResult{
-	Target: []*blaze_query.Target{
-		&blaze_query.Target{
-			Type: blaze_query.Target_RULE.Enum(),
-			Rule: &blaze_query.Rule{
-				Name:      proto.String("//e2e/simple:simple"),
-				RuleClass: proto.String("go_binary"),
-				Attribute: []*blaze_query.Attribute{
-					&blaze_query.Attribute{
-						Name:            proto.String("name"),
-						Type:            blaze_query.Attribute_STRING.Enum(),
-						StringListValue: []string{"simple"},
-					},
+func buildFiles(name string) *blaze_query.QueryResult {
+	return &blaze_query.QueryResult{
+		Target: []*blaze_query.Target{
+			&blaze_query.Target{
+				Type: blaze_query.Target_SOURCE_FILE.Enum(),
+				SourceFile: &blaze_query.SourceFile{
+					Name:            proto.String("//e2e/simple:BUILD.bazel"),
+					Location:        proto.String("/home/user/go/src/github.com/bazelbuild/bazel-watcher/e2e/simple/BUILD.bazel:1"),
+					VisibilityLabel: []string{"//visibility:private"},
 				},
-				RuleInput: []string{"//e2e/simple:go_default_library"},
 			},
 		},
-	},
+	}
+}
+
+func target(name string, tags []string) *blaze_query.QueryResult {
+	return &blaze_query.QueryResult{
+		Target: []*blaze_query.Target{
+			&blaze_query.Target{
+				Type: blaze_query.Target_RULE.Enum(),
+				Rule: &blaze_query.Rule{
+					Name:      proto.String(fmt.Sprintf("//e2e/%s:%s", name, name)),
+					RuleClass: proto.String("go_binary"),
+					Attribute: []*blaze_query.Attribute{
+						&blaze_query.Attribute{
+							Name:        proto.String("name"),
+							Type:        blaze_query.Attribute_STRING.Enum(),
+							StringValue: proto.String(name),
+						},
+						&blaze_query.Attribute{
+							Name:                proto.String("tags"),
+							Type:                blaze_query.Attribute_STRING_LIST.Enum(),
+							StringListValue:     tags,
+							ExplicitlySpecified: proto.Bool(true),
+							Nodep:               proto.Bool(false),
+						},
+					},
+					RuleInput: []string{fmt.Sprintf("//e2e/%s:go_default_library", name)},
+				},
+			},
+		},
+	}
 }
 
 func main() {
@@ -128,10 +144,17 @@ func main() {
 		{[]interface{}{"build"}, 0, `Build output`},
 
 		// E2E simple test data.
-		{[]interface{}{"query", "--output=proto", "--order_output=no", "buildfiles(deps(set(//e2e/simple)))"}, 0, buildFiles},
-		{[]interface{}{"query", "--output=proto", "--order_output=no", "kind('source file', deps(set(//e2e/simple)))"}, 0, sourceFiles},
-		{[]interface{}{"query", "--output=proto", "--order_output=no", "//e2e/simple"}, 0, target},
-		{[]interface{}{"run", regexp.MustCompile("--script_path=.*"), "//e2e/simple"}, 0, runWithScript},
+		{[]interface{}{"query", "--output=proto", "--order_output=no", "buildfiles(deps(set(//e2e/simple)))"}, 0, buildFiles("simple")},
+		{[]interface{}{"query", "--output=proto", "--order_output=no", "kind('source file', deps(set(//e2e/simple)))"}, 0, sourceFiles("simple")},
+		{[]interface{}{"query", "--output=proto", "--order_output=no", "//e2e/simple"}, 0, target("simple", []string{})},
+		{[]interface{}{"run", regexp.MustCompile("--script_path=.*"), "//e2e/simple"}, 0, runWithScript("simple")},
+
+		// E2E notification test data.
+		{[]interface{}{"query", "--output=proto", "--order_output=no", "buildfiles(deps(set(//e2e/notification)))"}, 0, buildFiles("notification")},
+		{[]interface{}{"query", "--output=proto", "--order_output=no", "kind('source file', deps(set(//e2e/notification)))"}, 0, sourceFiles("notification")},
+		{[]interface{}{"query", "--output=proto", "--order_output=no", "//e2e/notification"}, 0, target("notification", []string{"iblaze_notify_changes"})},
+		{[]interface{}{"build", "//e2e/notification"}, 0, ""},
+		{[]interface{}{"run", regexp.MustCompile("--script_path=.*"), "//e2e/notification"}, 0, runWithScript("notification")},
 	}
 
 	for _, opt := range inputs {
