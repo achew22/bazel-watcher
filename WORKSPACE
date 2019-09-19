@@ -15,45 +15,11 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 http_archive(
-    name = "com_github_bazelbuild_bazel_integration_testing",
-    sha256 = "16fae60b9284415a6cb5fadd6c9219201f7587820ced7c7cb277d0fc6b19b345",
-    strip_prefix = "bazel-integration-testing-2ce0893982858dcc5fc7234d4a48c17d8dfd0c71",
-    url = "https://github.com/bazelbuild/bazel-integration-testing/archive/2ce0893982858dcc5fc7234d4a48c17d8dfd0c71.tar.gz",
-)
-load("@com_github_bazelbuild_bazel_integration_testing//tools:repositories.bzl", "bazel_binaries")
-
-bazel_binaries()
-
-http_archive(
-    name = "bazel_skylib",
-    sha256 = "9245b0549e88e356cd6a25bf79f97aa19332083890b7ac6481a2affb6ada9752",
-    strip_prefix = "bazel-skylib-0.9.0",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/archive/0.9.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-skylib/archive/0.9.0.tar.gz",
-    ],
-)
-
-# NOTE: URLs are mirrored by an asynchronous review process. They must
-#       be greppable for that to happen. It's OK to submit broken mirror
-#       URLs, so long as they're correctly formatted. Bazel's downloader
-#       has fast failover.
-
-http_archive(
     name = "io_bazel_rules_go",
-    sha256 = "f04d2373bcaf8aa09bccb08a98a57e721306c8f6043a2a0ee610fd6853dcde3d",
+    sha256 = "ae8c36ff6e565f674c7a3692d6a9ea1096e4c1ade497272c2108a810fb39acd2",
     urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/0.18.6/rules_go-0.18.6.tar.gz",
-        "https://github.com/bazelbuild/rules_go/releases/download/0.18.6/rules_go-0.18.6.tar.gz",
-    ],
-)
-
-http_archive(
-    name = "bazel_gazelle",
-    sha256 = "3c681998538231a2d24d0c07ed5a7658cb72bfb5fd4bf9911157c0e9ac6a2687",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/0.17.0/bazel-gazelle-0.17.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/0.17.0/bazel-gazelle-0.17.0.tar.gz",
+        "https://storage.googleapis.com/bazel-mirror/github.com/bazelbuild/rules_go/releases/download/0.19.4/rules_go-0.19.4.tar.gz",
+        "https://github.com/bazelbuild/rules_go/releases/download/0.19.4/rules_go-0.19.4.tar.gz",
     ],
 )
 
@@ -63,9 +29,45 @@ go_rules_dependencies()
 
 go_register_toolchains()
 
+http_archive(
+    name = "bazel_gazelle",
+    sha256 = "7fc87f4170011201b1690326e8c16c5d802836e3a0d617d8f75c3af2b23180c4",
+    urls = [
+        "https://storage.googleapis.com/bazel-mirror/github.com/bazelbuild/bazel-gazelle/releases/download/0.18.2/bazel-gazelle-0.18.2.tar.gz",
+        "https://github.com/bazelbuild/bazel-gazelle/releases/download/0.18.2/bazel-gazelle-0.18.2.tar.gz",
+    ],
+)
+
 load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies", "go_repository")
 
 gazelle_dependencies()
+
+http_archive(
+    name = "com_github_bazelbuild_bazel_integration_testing",
+    sha256 = "16fae60b9284415a6cb5fadd6c9219201f7587820ced7c7cb277d0fc6b19b345",
+    strip_prefix = "bazel-integration-testing-2ce0893982858dcc5fc7234d4a48c17d8dfd0c71",
+    url = "https://github.com/bazelbuild/bazel-integration-testing/archive/2ce0893982858dcc5fc7234d4a48c17d8dfd0c71.tar.gz",
+)
+
+load("@com_github_bazelbuild_bazel_integration_testing//tools:repositories.bzl", "bazel_binaries")
+
+bazel_binaries()
+
+http_archive(
+    name = "rules_proto",
+    sha256 = "602e7161d9195e50246177e7c55b2f39950a9cf7366f74ed5f22fd45750cd208",
+    strip_prefix = "rules_proto-97d8af4dc474595af3900dd85cb3a29ad28cc313",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/rules_proto/archive/97d8af4dc474595af3900dd85cb3a29ad28cc313.tar.gz",
+        "https://github.com/bazelbuild/rules_proto/archive/97d8af4dc474595af3900dd85cb3a29ad28cc313.tar.gz",
+    ],
+)
+
+load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
+
+rules_proto_dependencies()
+
+rules_proto_toolchains()
 
 go_repository(
     name = "com_github_fsnotify_fsnotify",

@@ -17,12 +17,16 @@ type jsPackage struct {
 	PublishConfig map[string]string `json:"publish_config"`
 }
 
+var unexpandedVersion = "{STABLE_GIT_VERSION}"
 var unsetVersion = "VERSION_NOT_SET"
 var Version string = unsetVersion
 
 func main() {
 	if unsetVersion == Version {
 		panic("The version string was not overriden. Please rebuild with --stamp")
+	}
+	if unexpandedVersion == Version {
+		panic("The version string was not expanded. Got: " + unexpandedVersion)
 	}
 
 	pkg := jsPackage{
