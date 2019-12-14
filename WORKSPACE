@@ -110,5 +110,5 @@ go_repository(
 go_repository(
     name = "com_github_bazelbuild_rules_go",
     importpath = "github.com/bazelbuild/rules_go",
-    tag = "v0.19.5",
+    tag = "v0.20.3",
 )
