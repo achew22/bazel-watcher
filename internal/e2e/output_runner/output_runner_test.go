@@ -240,10 +240,8 @@ func TestMergeGlobalAndLocalConfigs(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpHome)
 
-	// Save original HOME and restore it after the test
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpHome)
+	// Set HOME for this test (automatically restored after test)
+	t.Setenv("HOME", tmpHome)
 
 	// Create global config with a command that matches a specific pattern
 	globalConfigContent := `[{
@@ -291,10 +289,8 @@ func TestGlobalConfigOnly(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpHome)
 
-	// Save original HOME and restore it after the test
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-	os.Setenv("HOME", tmpHome)
+	// Set HOME for this test (automatically restored after test)
+	t.Setenv("HOME", tmpHome)
 
 	// Create global config
 	globalConfigContent := `[{
