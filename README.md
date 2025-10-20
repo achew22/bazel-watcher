@@ -76,10 +76,14 @@ stdin.
 iBazel is capable of producing and running commands from the output of Bazel
 commands. If iBazel is run with the flag `--run_output` then it will check for
 a `%WORKSPACE%/.bazel_fix_commands.json` and if present run any commands that
-match the provided regular expressions.  For example the commands defined by
-the following file will match `buildozer` commands found in the output and
-provide a prompt to run the command as well as invoke `bazel run //:gazelle` if
-it detects a missing import for your go code.
+match the provided regular expressions. Additionally, iBazel will also load
+commands from `$HOME/.bazel_fix_commands.json` if it exists, allowing you to
+define global default commands across all your projects. Commands from both
+files are merged, with project-local commands supplementing the global ones.
+
+For example the commands defined by the following file will match `buildozer`
+commands found in the output and provide a prompt to run the command as well
+as invoke `bazel run //:gazelle` if it detects a missing import for your go code.
 
 ```
 [

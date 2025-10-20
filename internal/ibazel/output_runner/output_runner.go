@@ -115,16 +115,35 @@ func (i *OutputRunner) executeOutput(output *bytes.Buffer) {
 }
 
 func (o *OutputRunner) readConfigs(configPath string) []Optcmd {
+	var mergedOptcmd []Optcmd
+
+	// First, try to load global config from home directory
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		globalConfigPath := filepath.Join(homeDir, configPath)
+		globalOptcmd := o.loadConfigFromPath(globalConfigPath, true)
+		if globalOptcmd != nil {
+			mergedOptcmd = append(mergedOptcmd, globalOptcmd...)
+			log.Logf("Loaded %d commands from global config: %s", len(globalOptcmd), globalConfigPath)
+		}
+	}
+
+	// Then, try to load project-local config from workspace
 	workspacePath, err := o.w.FindWorkspace()
 	if err != nil {
 		log.Fatalf("Error finding workspace: %v", err)
 		os.Exit(5)
 	}
 
-	jsonFile, err := os.Open(filepath.Join(workspacePath, configPath))
-	if os.IsNotExist(err) {
-		// Note this is not attached to the os.IsNotExist because we don't want the
-		// other error handler to catch if we hav already notified.
+	localConfigPath := filepath.Join(workspacePath, configPath)
+	localOptcmd := o.loadConfigFromPath(localConfigPath, false)
+	if localOptcmd != nil {
+		mergedOptcmd = append(mergedOptcmd, localOptcmd...)
+		log.Logf("Loaded %d commands from local config: %s", len(localOptcmd), localConfigPath)
+	}
+
+	// If no configs were found, show the banner (only once)
+	if len(mergedOptcmd) == 0 {
 		if !notifiedUser {
 			log.Banner(
 				"Did you know iBazel can invoke programs like Gazelle, buildozer, and",
@@ -133,8 +152,19 @@ func (o *OutputRunner) readConfigs(configPath string) []Optcmd {
 		}
 		notifiedUser = true
 		return nil
+	}
+
+	return mergedOptcmd
+}
+
+func (o *OutputRunner) loadConfigFromPath(configPath string, isGlobal bool) []Optcmd {
+	jsonFile, err := os.Open(configPath)
+	if os.IsNotExist(err) {
+		return nil
 	} else if err != nil {
-		log.Errorf("Error reading config: %s", err)
+		if !isGlobal {
+			log.Errorf("Error reading config: %s", err)
+		}
 		return nil
 	}
 	defer jsonFile.Close()
@@ -143,7 +173,12 @@ func (o *OutputRunner) readConfigs(configPath string) []Optcmd {
 	var optcmd []Optcmd
 	err = json.Unmarshal(byteValue, &optcmd)
 	if err != nil {
-		log.Errorf("Error in .bazel_fix_commands.json: %s", err)
+		configType := "local"
+		if isGlobal {
+			configType = "global"
+		}
+		log.Errorf("Error in %s .bazel_fix_commands.json: %s", configType, err)
+		return nil
 	}
 
 	return optcmd

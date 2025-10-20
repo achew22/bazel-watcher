@@ -231,3 +231,89 @@ invalid json file
 	ibazel.ExpectIBazelError("Error in .bazel_fix_commands.json")
 	ibazel.ExpectOutput("action")
 }
+
+func TestMergeGlobalAndLocalConfigs(t *testing.T) {
+	// Create a temporary home directory with a global config
+	tmpHome, err := ioutil.TempDir("", "ibazel-test-home")
+	if err != nil {
+		t.Fatalf("Failed to create temp home directory: %v", err)
+	}
+	defer os.RemoveAll(tmpHome)
+
+	// Save original HOME and restore it after the test
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tmpHome)
+
+	// Create global config with a command that matches a specific pattern
+	globalConfigContent := `[{
+		"regex": "global-trigger",
+		"command": "echo",
+		"args": ["global-command"]
+	}]`
+	globalConfigPath := tmpHome + "/.bazel_fix_commands.json"
+	if err := ioutil.WriteFile(globalConfigPath, []byte(globalConfigContent), 0644); err != nil {
+		t.Fatalf("Failed to write global config: %v", err)
+	}
+
+	// Create local config with a different command
+	e2e.MustWriteFile(t, ".bazel_fix_commands.json", `[{
+		"regex": "local-trigger",
+		"command": "echo",
+		"args": ["local-command"]
+	}]`)
+
+	ibazel := e2e.SetUp(t)
+
+	// Create a genrule that outputs both triggers
+	e2e.MustWriteFile(t, "merge_test/BUILD", `
+genrule(
+  name = "test_merge",
+  outs = ["out.txt"],
+  cmd = "echo 'global-trigger' >&2 && echo 'local-trigger' >&2 && echo 'done' > $@"
+)`)
+
+	ibazel.RunWithBazelFixCommands("//merge_test:test_merge")
+	defer ibazel.Kill()
+
+	// Both commands should be executed
+	ibazel.ExpectFixCommands([]string{
+		"echo global-command",
+		"echo local-command",
+	})
+}
+
+func TestGlobalConfigOnly(t *testing.T) {
+	// Create a temporary home directory with a global config
+	tmpHome, err := ioutil.TempDir("", "ibazel-test-home")
+	if err != nil {
+		t.Fatalf("Failed to create temp home directory: %v", err)
+	}
+	defer os.RemoveAll(tmpHome)
+
+	// Save original HOME and restore it after the test
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tmpHome)
+
+	// Create global config
+	globalConfigContent := `[{
+		"regex": "INFO: Build completed successfully",
+		"command": "echo",
+		"args": ["from-global"]
+	}]`
+	globalConfigPath := tmpHome + "/.bazel_fix_commands.json"
+	if err := ioutil.WriteFile(globalConfigPath, []byte(globalConfigContent), 0644); err != nil {
+		t.Fatalf("Failed to write global config: %v", err)
+	}
+
+	// Do NOT create a local config - test that global config works alone
+	ibazel := e2e.SetUp(t)
+	ibazel.RunWithBazelFixCommands("//single:test")
+	defer ibazel.Kill()
+
+	// The global config command should be executed
+	ibazel.ExpectFixCommands([]string{
+		"echo from-global",
+	})
+}
